@@ -1,12 +1,13 @@
 import json
 from tqdm import tqdm 
 
+SCENE = "foggy"
 ORI_JSON_PATH = "/mnt/ve_share/generation/data/train/diffusions/comb_cls/index.json"
-NEW_JSON_PATH = "/mnt/ve_share/generation/data/p2p/ori_jsons/snowy_replace.json"
+NEW_JSON_PATH = "/mnt/ve_share/generation/data/p2p/ori_jsons/%s_replace.json" % SCENE
 street_words = ["street", "road", "highway"]
 selected_word = ["night", "rain", "fog", "day", "snow", "cloud",]
 # replace_scene_word = ["night", "rainy", "snowy", "foggy", "cloudy"]
-replace_scene_word = ["snowy",]
+replace_scene_word = [SCENE,]
 STREET = False
 
 
@@ -51,6 +52,8 @@ result = []
 count = 0 
 for scene in tqdm(replace_scene_word):
     for prompt in tqdm(ori_prompts):
+        if "/" in prompt:
+            continue
         res_dict = dict()
         if scene == "night":
             if STREET:

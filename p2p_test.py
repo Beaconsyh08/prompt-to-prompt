@@ -6,7 +6,9 @@ import json
 from PIL import Image
 from typing import Optional, Union, Tuple, List, Callable, Dict
 import torch
-from diffusers import StableDiffusionPipeline, DiffusionPipeline
+import sys
+sys.path.append('/share/generation')
+from diffusers import StableDiffusionPipeline, DiffusionPipeline, UniPCMultistepScheduler
 import torch.nn.functional as nnf
 import numpy as np
 import abc
@@ -23,9 +25,10 @@ MAX_NUM_WORDS = 77
 device = torch.device(
     'cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 # model_id = '/mnt/share_disk/lei/git/diffusers/local_models/stable-diffusion-v1-5'
-model_id = "/mnt/ve_share/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.4.0"
+model_id = "/share/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.5.0"
 # ldm_stable = StableDiffusionPipeline.from_pretrained(model_id, use_auth_token=MY_TOKEN).to(device)
 ldm_stable = StableDiffusionPipeline.from_pretrained(model_id).to(device)
+ldm_stable.scheduler = UniPCMultistepScheduler.from_config(ldm_stable.scheduler.config)
 tokenizer = ldm_stable.tokenizer
 
 
@@ -333,17 +336,21 @@ def replace_blend_reweight(prompts: list, words: tuple, latent_x, save_root: str
     save_id = "%s/%s_%d" % (save_func, scene, id)
     if not os.path.exists(save_id):
         os.makedirs(save_id, exist_ok=True)
-    co_path = "%s/%.2f_%.2f_%.2f" % (save_id, cross_steps, self_steps, amplify_co)
+    co_path = "%s/%.2f_%.2f_%.2f" % (save_id, cross_steps, self_steps, amplify_co)    
+    save_path_1 = "%s/%s.png" % (co_path, "_".join(prompts[0].split()))
+    save_path_2 = "%s/%s.png" % (co_path, "_".join(prompts[1].split()))
     if not os.path.exists(co_path):
         os.makedirs(co_path, exist_ok=True)
-        save_path_1 = "%s/%s.png" % (co_path, "_".join(prompts[0].split()))
-        save_path_2 = "%s/%s.png" % (co_path, "_".join(prompts[1].split()))
-        _ = run_and_display(prompts, controller, latent=latent_x, run_baseline=False, save_path_1=save_path_1, save_path_2=save_path_2)
+    _ = run_and_display(prompts, controller, latent=latent_x, run_baseline=False, save_path_1=save_path_1, save_path_2=save_path_2)
     return save_path_1, save_path_2
-    # return save
     
 
-# def refine()
+# def refine():
+#     prompts = ["A painting of a squirrel eating a burger",
+#             "A neoclassical painting of a squirrel eating a burger"]
+
+#     controller = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps, self_replace_steps=self_steps)
+#     _ = run_and_display(prompts, controller, latent=x_t)
 
 
 if __name__ == "__main__":
@@ -360,11 +367,12 @@ if __name__ == "__main__":
     ORI_JSON_PATH = args.ORI_JSON_PATH
     CO = args.CO
 
-    # ORI_JSON_PATH = "/mnt/ve_share/generation/data/train/diffusions/comb_cls/index_new.json"
-    SAVE_ROOT = "/mnt/ve_share/generation/data/p2p/imgs"
+    # ORI_JSON_PATH = "/share/generation/data/train/diffusions/comb_cls/index_new.json"
+    
+    SAVE_ROOT = "/share/generation/data/p2p/imgs"
     from datetime import datetime
     current_time = datetime.now().time()
-    NEW_JSON_PATH = "%s/p2p.json" % SAVE_ROOT
+    NEW_JSON_PATH = "/share/generation/data/p2p/new_jsons/%s" % ORI_JSON_PATH.split("/")[-1]
     
     os.makedirs(SAVE_ROOT, exist_ok=True)
 
@@ -374,15 +382,15 @@ if __name__ == "__main__":
     result = []
     with open(ORI_JSON_PATH, 'r') as file:
         data = json.load(file)
-        data = [_ for _ in data if _["scene"] in ["night"]]
-        data = random.sample(data, 10)
+        # data = [_ for _ in data if _["scene"] in ["night"]]
+        # data = random.sample(data, 10)
         
     for each in tqdm(data):
         prompts = [each["prompt_1"], each["prompt_2"]]
         id, scene = each["id"], each["scene"]
 
-        controller = AttentionStore()
-        image, x_t = run_and_display([prompts[0]], controller, latent=None, run_baseline=False, generator=g_cpu, split_save=False)
+        # controller = AttentionStore()
+        # image, x_t = run_and_display([prompts[0]], controller, latent=None, run_baseline=False, generator=g_cpu, split_save=False)
 
         words1 = prompts[0].split()
         words2 = prompts[1].split()
@@ -392,8 +400,8 @@ if __name__ == "__main__":
             if word1 != word2:
                 different_words.append((word1, word2))
 
-        if len(different_words) == 1:
-            save_path_1, save_path_2 = replace_blend_reweight(prompts, different_words[0], latent_x=x_t, save_root=SAVE_ROOT, scene=scene, id=id, cross_steps=CO, self_steps=CO)
+        if len(set(different_words)) == 1:
+            save_path_1, save_path_2 = replace_blend_reweight(prompts, different_words[0], latent_x=None, save_root=SAVE_ROOT, scene=scene, id=id, cross_steps=CO, self_steps=CO)
             
         each["img_path_1"] = save_path_1
         each["img_path_2"] = save_path_2
