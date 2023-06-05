@@ -24,7 +24,7 @@ GUIDANCE_SCALE = 7.5
 MAX_NUM_WORDS = 77
 device = torch.device(
     'cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-# model_id = '/mnt/share_disk/lei/git/diffusers/local_models/stable-diffusion-v1-5'
+# model_id = '/mnt/mnt/ve_share_disk/lei/git/diffusers/local_models/stable-diffusion-v1-5'
 model_id = "/share/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.5.0"
 # ldm_stable = StableDiffusionPipeline.from_pretrained(model_id, use_auth_token=MY_TOKEN).to(device)
 ldm_stable = StableDiffusionPipeline.from_pretrained(model_id).to(device)
@@ -345,12 +345,25 @@ def replace_blend_reweight(prompts: list, words: tuple, latent_x, save_root: str
     return save_path_1, save_path_2
     
 
-# def refine():
-#     prompts = ["A painting of a squirrel eating a burger",
-#             "A neoclassical painting of a squirrel eating a burger"]
+def refine(prompts: list, words: tuple, amplify_word: str, latent_x, save_root: str, scene:str=None, id: int =0, cross_steps: float = 0.8, self_steps: float = 0.8, amplify_co: float = 2.0):
+    word_blend = LocalBlend(prompts, words)
+    controller_a = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps, self_replace_steps=self_steps, local_blend=word_blend)
+    equalizer = get_equalizer(prompts[1], (amplify_word,), (2,))
+    controller = AttentionReweight(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps, self_replace_steps=self_steps, equalizer=equalizer, controller=controller_a, local_blend=word_blend)
 
-#     controller = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps, self_replace_steps=self_steps)
-#     _ = run_and_display(prompts, controller, latent=x_t)
+    save_func = "%s/refine" % save_root
+    if not os.path.exists(save_func):
+        os.makedirs(save_func, exist_ok=True)
+    save_id = "%s/%s_%d" % (save_func, scene, id)
+    if not os.path.exists(save_id):
+        os.makedirs(save_id, exist_ok=True)
+    co_path = "%s/%.2f_%.2f_%.2f" % (save_id, cross_steps, self_steps, amplify_co)    
+    save_path_1 = "%s/%s.png" % (co_path, "_".join(prompts[0].split()))
+    save_path_2 = "%s/%s.png" % (co_path, "_".join(prompts[1].split()))
+    if not os.path.exists(co_path):
+        os.makedirs(co_path, exist_ok=True)
+    _ = run_and_display(prompts, controller, latent=latent_x,  run_baseline=False, save_path_1=save_path_1, save_path_2=save_path_2)
+    return save_path_1, save_path_2
 
 
 if __name__ == "__main__":
@@ -396,12 +409,19 @@ if __name__ == "__main__":
         words2 = prompts[1].split()
         different_words = []
 
-        for word1, word2 in zip(words1, words2):
-            if word1 != word2:
-                different_words.append((word1, word2))
+        for word_1, word_2 in zip(words1, words2):
+            if word_1 != word_2:
+                different_words.append((word_1, word_2))
 
         if len(set(different_words)) == 1:
             save_path_1, save_path_2 = replace_blend_reweight(prompts, different_words[0], latent_x=None, save_root=SAVE_ROOT, scene=scene, id=id, cross_steps=CO, self_steps=CO)
+        else:
+            last_word = "" 
+            for word_1, word_2 in zip(words1, words2):
+                if word_1 != word_2:
+                    break
+                last_word = word_2
+            save_path_1, save_path_2 = refine(prompts, words=(last_word, last_word), amplify_word="snow", latent_x=None, save_root=SAVE_ROOT, scene=scene, id=id, cross_steps=CO, self_steps=CO)
             
         each["img_path_1"] = save_path_1
         each["img_path_2"] = save_path_2
