@@ -4,7 +4,7 @@ from diffusers import StableDiffusionPipeline
 import torch.nn.functional as nnf
 import numpy as np
 import abc
-import ptp_utils
+import ptp_utils_bak
 import seq_aligner
 
 MY_TOKEN = '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'
@@ -41,7 +41,7 @@ class LocalBlend:
             if type(words_) is str:
                 words_ = [words_]
             for word in words_:
-                ind = ptp_utils.get_word_inds(prompt, word, tokenizer)
+                ind = ptp_utils_bak.get_word_inds(prompt, word, tokenizer)
                 alpha_layers[i, :, :, :, :, ind] = 1
         self.alpha_layers = alpha_layers.to(device)
         self.threshold = threshold
@@ -168,7 +168,7 @@ class AttentionControlEdit(AttentionStore, abc.ABC):
                  local_blend: Optional[LocalBlend]):
         super(AttentionControlEdit, self).__init__()
         self.batch_size = len(prompts)
-        self.cross_replace_alpha = ptp_utils.get_time_words_attention_alpha(prompts, num_steps, cross_replace_steps, tokenizer).to(device)
+        self.cross_replace_alpha = ptp_utils_bak.get_time_words_attention_alpha(prompts, num_steps, cross_replace_steps, tokenizer).to(device)
         if type(self_replace_steps) is float:
             self_replace_steps = 0, self_replace_steps
         self.num_self_replace = int(num_steps * self_replace_steps[0]), int(num_steps * self_replace_steps[1])
@@ -222,7 +222,7 @@ def get_equalizer(text: str, word_select: Union[int, Tuple[int, ...]], values: U
     equalizer = torch.ones(len(values), 77)
     values = torch.tensor(values, dtype=torch.float32)
     for word in word_select:
-        inds = ptp_utils.get_word_inds(text, word, tokenizer)
+        inds = ptp_utils_bak.get_word_inds(text, word, tokenizer)
         equalizer[:, inds] = values
     return equalizer
 
@@ -254,9 +254,9 @@ def show_cross_attention(attention_store: AttentionStore, res: int, from_where: 
         image = image.unsqueeze(-1).expand(*image.shape, 3)
         image = image.numpy().astype(np.uint8)
         image = np.array(Image.fromarray(image).resize((256, 256)))
-        image = ptp_utils.text_under_image(image, decoder(int(tokens[i])))
+        image = ptp_utils_bak.text_under_image(image, decoder(int(tokens[i])))
         images.append(image)
-    ptp_utils.view_images(np.stack(images, axis=0))
+    ptp_utils_bak.view_images(np.stack(images, axis=0))
     
 
 def show_self_attention_comp(attention_store: AttentionStore, res: int, from_where: List[str],
@@ -272,7 +272,7 @@ def show_self_attention_comp(attention_store: AttentionStore, res: int, from_whe
         image = Image.fromarray(image).resize((256, 256))
         image = np.array(image)
         images.append(image)
-    ptp_utils.view_images(np.concatenate(images, axis=1))
+    ptp_utils_bak.view_images(np.concatenate(images, axis=1))
 
 
 
@@ -281,8 +281,8 @@ def run_and_display(prompts, controller, latent=None, run_baseline=False, genera
         print("w.o. prompt-to-prompt")
         images, latent = run_and_display(prompts, EmptyControl(), latent=latent, run_baseline=False, generator=generator,save_path=save_path)
         print("with prompt-to-prompt")
-    images, x_t = ptp_utils.text2image_ldm_stable(ldm_stable, prompts, controller, latent=latent, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE)
-    ptp_utils.view_images(images,save_path=save_path)
+    images, x_t = ptp_utils_bak.text2image_ldm_stable(ldm_stable, prompts, controller, latent=latent, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE)
+    ptp_utils_bak.view_images(images,save_path=save_path)
     return images, x_t
 
 ## Cross-Attention Visualization
@@ -291,7 +291,7 @@ prompts = ["A painting of a squirrel eating a burger"]
 controller = AttentionStore()
 # image, x_t = run_and_display(prompts, controller, latent=None, run_baseline=False, generator=g_cpu)
 # show_cross_attention(controller, res=16, from_where=("up", "down"))
-images, x_t = ptp_utils.text2image_ldm_stable(ldm_stable, prompts, controller, latent=None, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=g_cpu, low_resource=LOW_RESOURCE)
+images, x_t = ptp_utils_bak.text2image_ldm_stable(ldm_stable, prompts, controller, latent=None, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=g_cpu, low_resource=LOW_RESOURCE)
 
 
 ## Replacement edit

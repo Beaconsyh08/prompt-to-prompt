@@ -76,35 +76,6 @@ def diffusion_step(model, controller, latents, context, t, guidance_scale, low_r
     latents = controller.step_callback(latents)
     return latents
 
-def diffusion_step_cn(model, control_image, controller, latents, context, t, guidance_scale, low_resource=False, contorlnet_scale=1.0):
-    if low_resource:
-        print('Not implement. Low resource controlnet')
-        raise TypeError()
-        noise_pred_uncond = model.unet(latents, t, encoder_hidden_states=context[0])["sample"]
-        noise_prediction_text = model.unet(latents, t, encoder_hidden_states=context[1])["sample"]
-    else:
-        latents_input = torch.cat([latents] * 2).to(dtype=model.unet.dtype)
-        
-        controlnet_latent_model_input = latents_input
-        controlnet_prompt_embeds=context
-        down_block_res_samples, mid_block_res_sample = model.controlnet(
-                    controlnet_latent_model_input,
-                    t,
-                    encoder_hidden_states=controlnet_prompt_embeds,
-                    controlnet_cond=control_image,
-                    conditioning_scale=contorlnet_scale,
-                    guess_mode=False,
-                    return_dict=False,
-                )
-        
-        noise_pred = model.unet(latents_input, t, encoder_hidden_states=context, down_block_additional_residuals=down_block_res_samples, mid_block_additional_residual=mid_block_res_sample)["sample"]
-        noise_pred_uncond, noise_prediction_text = noise_pred.chunk(2)
-    
-    noise_pred = noise_pred_uncond + guidance_scale * (noise_prediction_text - noise_pred_uncond)
-    latents = model.scheduler.step(noise_pred, t, latents)["prev_sample"]
-    latents = controller.step_callback(latents)
-    return latents
-
 
 def latent2image(vae, latents):
     latents = 1 / 0.18215 * latents
@@ -144,7 +115,6 @@ def text2image_ldm(
     
     text_input = model.tokenizer(prompt, padding="max_length", max_length=77, return_tensors="pt")
     text_embeddings = model.bert(text_input.input_ids.to(model.device))[0]
-    
     latent, latents = init_latent(latent, model, height, width, generator, batch_size)
     context = torch.cat([uncond_embeddings, text_embeddings])
     
@@ -162,7 +132,6 @@ def text2image_ldm_stable(
     model,
     prompt: List[str],
     controller,
-    img_wh=(512,512),
     num_inference_steps: int = 50,
     guidance_scale: float = 7.5,
     generator: Optional[torch.Generator] = None,
@@ -170,21 +139,27 @@ def text2image_ldm_stable(
     low_resource: bool = False,
 ):
     register_attention_control(model, controller)
-    height = img_wh[1]
-    width = img_wh[0]
+    height = width = 512
     batch_size = len(prompt)
 
-    text_input = model.tokenizer(prompt, padding="max_length", max_length=model.tokenizer.model_max_length, truncation=True, return_tensors="pt")
+    text_input = model.tokenizer(
+        prompt,
+        padding="max_length",
+        max_length=model.tokenizer.model_max_length,
+        truncation=True,
+        return_tensors="pt",
+    )
     text_embeddings = model.text_encoder(text_input.input_ids.to(model.device))[0]
     max_length = text_input.input_ids.shape[-1]
-    
-    uncond_input = model.tokenizer([""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt")
+    uncond_input = model.tokenizer(
+        [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt"
+    )
     uncond_embeddings = model.text_encoder(uncond_input.input_ids.to(model.device))[0]
     
-    latent, latents = init_latent(latent, model, height, width, generator, batch_size)
     context = [uncond_embeddings, text_embeddings]
     if not low_resource:
         context = torch.cat(context)
+    latent, latents = init_latent(latent, model, height, width, generator, batch_size)
     
     # set timesteps
     # extra_set_kwargs = {"offset": 1}
@@ -194,79 +169,6 @@ def text2image_ldm_stable(
         latents = diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource)
     
     image = latent2image(model.vae, latents)
-  
-    return image, latent
-
-@torch.no_grad()
-def text2image_ldm_stable_cn(
-    model,
-    image,
-    prompt: List[str],
-    controller,
-    img_wh=(512,512),
-    num_inference_steps: int = 50,
-    guidance_scale: float = 7.5,
-    generator: Optional[torch.Generator] = None,
-    latent: Optional[torch.FloatTensor] = None,
-    low_resource: bool = False,
-    contorlnet_scale: float = 1.0,
-):
-    register_attention_control(model, controller)
-    height = img_wh[1]
-    width = img_wh[0]
-    batch_size = len(prompt)
-
-    text_input = model.tokenizer(prompt, padding="max_length", max_length=model.tokenizer.model_max_length, truncation=True, return_tensors="pt")
-    text_embeddings = model.text_encoder(text_input.input_ids.to(model.device))[0]
-    max_length = text_input.input_ids.shape[-1]
-    
-    uncond_input = model.tokenizer([""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt")
-    uncond_embeddings = model.text_encoder(uncond_input.input_ids.to(model.device))[0]
-    
-    latent, latents = init_latent(latent, model, height, width, generator, batch_size)
-    context = [uncond_embeddings, text_embeddings]
-    if not low_resource:
-        context = torch.cat(context)
-    ##control_image
-    if not isinstance(image, torch.Tensor):
-        if isinstance(image, Image.Image):
-            image = [image]
-
-        if isinstance(image[0], Image.Image):
-            images = []
-            for image_ in image:
-                image_ = image_.convert("RGB")
-                # image_ = image_.resize((width, height), resample=PIL_INTERPOLATION["lanczos"])
-                image_ = np.array(image_)
-                image_ = image_[None, :]
-                images.append(image_)
-            image = images
-            image = np.concatenate(image, axis=0)
-            image = np.array(image).astype(np.float32) / 255.0
-            image = image.transpose(0, 3, 1, 2)
-            image = torch.from_numpy(image)
-        elif isinstance(image[0], torch.Tensor):
-            image = torch.cat(image, dim=0)
-
-    image_batch_size = image.shape[0]
-
-    if image_batch_size == 1:
-        repeat_by = batch_size
-    else:
-        # image batch size is the same as prompt batch size
-        repeat_by = num_images_per_prompt
-
-    image = image.repeat_interleave(repeat_by, dim=0)
-    image = image.to(device=torch.device('cuda:0'),dtype=torch.float16)
-    image = torch.cat([image] * 2)
-    
-    # set timesteps
-    # extra_set_kwargs = {"offset": 1}
-    # model.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
-    model.scheduler.set_timesteps(num_inference_steps)
-    for t in tqdm(model.scheduler.timesteps):
-        latents = diffusion_step_cn(model, image, controller, latents, context, t, guidance_scale, low_resource, contorlnet_scale)
-    image = latent2image(model.vae, latents.to(model.vae.dtype))
   
     return image, latent
 

@@ -5,7 +5,7 @@ from diffusers import StableDiffusionPipeline, DDIMScheduler
 import torch.nn.functional as nnf
 import numpy as np
 import abc
-import ptp_utils
+import ptp_utils_bak
 import seq_aligner
 import shutil
 from torch.optim.adam import Adam
@@ -64,7 +64,7 @@ class LocalBlend:
             if type(words_) is str:
                 words_ = [words_]
             for word in words_:
-                ind = ptp_utils.get_word_inds(prompt, word, tokenizer)
+                ind = ptp_utils_bak.get_word_inds(prompt, word, tokenizer)
                 alpha_layers[i, :, :, :, :, ind] = 1
         
         if substruct_words is not None:
@@ -73,7 +73,7 @@ class LocalBlend:
                 if type(words_) is str:
                     words_ = [words_]
                 for word in words_:
-                    ind = ptp_utils.get_word_inds(prompt, word, tokenizer)
+                    ind = ptp_utils_bak.get_word_inds(prompt, word, tokenizer)
                     substruct_layers[i, :, :, :, :, ind] = 1
             self.substruct_layers = substruct_layers.to(device)
         else:
@@ -224,7 +224,7 @@ class AttentionControlEdit(AttentionStore, abc.ABC):
                  local_blend: Optional[LocalBlend]):
         super(AttentionControlEdit, self).__init__()
         self.batch_size = len(prompts)
-        self.cross_replace_alpha = ptp_utils.get_time_words_attention_alpha(prompts, num_steps, cross_replace_steps, tokenizer).to(device)
+        self.cross_replace_alpha = ptp_utils_bak.get_time_words_attention_alpha(prompts, num_steps, cross_replace_steps, tokenizer).to(device)
         if type(self_replace_steps) is float:
             self_replace_steps = 0, self_replace_steps
         self.num_self_replace = int(num_steps * self_replace_steps[0]), int(num_steps * self_replace_steps[1])
@@ -279,7 +279,7 @@ def get_equalizer(text: str, word_select: Union[int, Tuple[int, ...]], values: U
         word_select = (word_select,)
     equalizer = torch.ones(1, 77)
     for word, val in zip(word_select, values):
-        inds = ptp_utils.get_word_inds(text, word, tokenizer)
+        inds = ptp_utils_bak.get_word_inds(text, word, tokenizer)
         equalizer[:, inds] = val
     return equalizer
 
@@ -322,9 +322,9 @@ def show_cross_attention(attention_store: AttentionStore, res: int, from_where: 
         image = image.unsqueeze(-1).expand(*image.shape, 3)
         image = image.numpy().astype(np.uint8)
         image = np.array(Image.fromarray(image).resize((256, 256)))
-        image = ptp_utils.text_under_image(image, decoder(int(tokens[i])))
+        image = ptp_utils_bak.text_under_image(image, decoder(int(tokens[i])))
         images.append(image)
-    ptp_utils.view_images(np.stack(images, axis=0))
+    ptp_utils_bak.view_images(np.stack(images, axis=0))
     
 
 def show_self_attention_comp(attention_store: AttentionStore, res: int, from_where: List[str],
@@ -340,7 +340,7 @@ def show_self_attention_comp(attention_store: AttentionStore, res: int, from_whe
         image = Image.fromarray(image).resize((256, 256))
         image = np.array(image)
         images.append(image)
-    ptp_utils.view_images(np.concatenate(images, axis=1))
+    ptp_utils_bak.view_images(np.concatenate(images, axis=1))
 
 
 
@@ -507,7 +507,7 @@ class NullInversion:
     
     def invert(self, image_path: str, prompt: str, offsets=(0,0,0,0), num_inner_steps=10, early_stop_epsilon=1e-5, verbose=False):
         self.init_prompt(prompt)
-        ptp_utils.register_attention_control(self.model, None)
+        ptp_utils_bak.register_attention_control(self.model, None)
         image_gt = load_512(image_path, *offsets)
         if verbose:
             print("DDIM inversion...")
@@ -544,7 +544,7 @@ def text2image_ldm_stable(
     return_type='image'
 ):
     batch_size = len(prompt)
-    ptp_utils.register_attention_control(model, controller)
+    ptp_utils_bak.register_attention_control(model, controller)
     height = width = 512
     
     text_input = model.tokenizer(
@@ -564,17 +564,17 @@ def text2image_ldm_stable(
     else:
         uncond_embeddings_ = None
 
-    latent, latents = ptp_utils.init_latent(latent, model, height, width, generator, batch_size)
+    latent, latents = ptp_utils_bak.init_latent(latent, model, height, width, generator, batch_size)
     model.scheduler.set_timesteps(num_inference_steps)
     for i, t in enumerate(tqdm(model.scheduler.timesteps[-start_time:])):
         if uncond_embeddings_ is None:
             context = torch.cat([uncond_embeddings[i].expand(*text_embeddings.shape), text_embeddings])
         else:
             context = torch.cat([uncond_embeddings_, text_embeddings])
-        latents = ptp_utils.diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=False)
+        latents = ptp_utils_bak.diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=False)
         
     if return_type == 'image':
-        image = ptp_utils.latent2image(model.vae, latents)
+        image = ptp_utils_bak.latent2image(model.vae, latents)
     else:
         image = latents
     return image, latent
@@ -586,7 +586,7 @@ def run_and_display(prompts, controller, latent=None, run_baseline=False, genera
         print("with prompt-to-prompt")
     images, x_t = text2image_ldm_stable(ldm_stable, prompts, controller, latent=latent, num_inference_steps=NUM_DDIM_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, uncond_embeddings=uncond_embeddings)
     if verbose:
-        ptp_utils.view_images(images)
+        ptp_utils_bak.view_images(images)
     return images, x_t
 
 image_path = "./example_images/gnochi_mirror.jpeg"
