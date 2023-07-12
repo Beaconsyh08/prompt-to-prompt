@@ -7,7 +7,7 @@ from PIL import Image
 from typing import Optional, Union, Tuple, List, Callable, Dict
 import torch
 import sys
-sys.path.append('/share/generation')
+sys.path.append('/share/songyuhao/generation')
 from diffusers import StableDiffusionPipeline, DiffusionPipeline, UniPCMultistepScheduler
 import torch.nn.functional as nnf
 import numpy as np
@@ -25,7 +25,7 @@ MAX_NUM_WORDS = 77
 device = torch.device(
     'cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 # model_id = '/mnt/mnt/ve_share_disk/lei/git/diffusers/local_models/stable-diffusion-v1-5'
-model_id = "/share/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.4.0"
+model_id = "/share/songyuhao/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.4.0"
 # ldm_stable = StableDiffusionPipeline.from_pretrained(model_id, use_auth_token=MY_TOKEN).to(device)
 ldm_stable = StableDiffusionPipeline.from_pretrained(model_id).to(device)
 ldm_stable.scheduler = UniPCMultistepScheduler.from_config(ldm_stable.scheduler.config)
@@ -378,12 +378,12 @@ if __name__ == "__main__":
     CO = args.CO
     START_P = args.START_P
 
-    # ORI_JSON_PATH = "/share/generation/data/train/diffusions/comb_cls/index_new.json"
+    # ORI_JSON_PATH = "/share/songyuhao/generation/data/train/diffusions/comb_cls/index_new.json"
     
-    SAVE_ROOT = "/share/generation/data/p2p/imgs"
+    SAVE_ROOT = "/share/songyuhao/generation/data/p2p/imgs"
     from datetime import datetime
     current_time = datetime.now().time()
-    NEW_JSON_PATH = "/share/generation/data/p2p/new_jsons/%s" % ORI_JSON_PATH.split("/")[-1]
+    NEW_JSON_PATH = "/share/songyuhao/generation/data/p2p/new_jsons/%s" % ORI_JSON_PATH.split("/")[-1]
     SCENES = ["night", "snowy", "rainy", "foggy"]
     MODELS = ["replace_blend_reweight", "refine_blend_reweight"]
     

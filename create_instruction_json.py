@@ -1,14 +1,14 @@
 import json
 from tqdm import tqdm 
 
-SCENE = "foggy"
-ORI_JSON_PATH = "/mnt/ve_share/generation/data/train/diffusions/comb_cls/index.json"
-NEW_JSON_PATH = "/mnt/ve_share/generation/data/p2p/ori_jsons/%s_replace.json" % SCENE
+SCENE = "night"
+STREET = True
+ORI_JSON_PATH = "/mnt/ve_share/songyuhao/generation/data/train/diffusions/comb_cls/index.json"
+NEW_JSON_PATH = "/mnt/ve_share/songyuhao/generation/data/p2p/ori_jsons/%s_replace_street.json" % SCENE if STREET else "/mnt/ve_share/songyuhao/generation/data/p2p/ori_jsons/%s_replace.json" % SCENE
 street_words = ["street", "road", "highway"]
 selected_word = ["night", "rain", "fog", "day", "snow", "cloud",]
 # replace_scene_word = ["night", "rainy", "snowy", "foggy", "cloudy"]
 replace_scene_word = [SCENE,]
-STREET = False
 
 
 def add_words(sentence, words_to_check, word_to_add):
@@ -18,7 +18,12 @@ def add_words(sentence, words_to_check, word_to_add):
 
     for word in words_to_check:
         for i, current_word in enumerate(words):
+            # print(words)
             if current_word.lower() == word.lower():
+                if i != len(words) - 1 and word == "street":
+                    if words[i+1] == "light":
+                        print(words)
+                        continue
                 # Found the word, add another word after it
                 new_sentence = ' '.join(words[:i+1] + [word_to_add] + words[i+1:])
                 words = new_sentence.split()  # Update the words list
@@ -43,9 +48,9 @@ for each in tqdm(data):
         ori_prompts.append(prompt)
         save = False
     
-print(len(ori_prompts))
-print(ori_prompts[:10])
-print(ori_prompts[-10:])
+# print(len(ori_prompts))
+# print(ori_prompts[:10])
+# print(ori_prompts[-10:])
 
 
 result = []

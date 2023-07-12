@@ -10,7 +10,7 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn.functional as nnf
-sys.path.append('/share/generation')
+sys.path.append('/share/songyuhao/generation')
 
 from diffusers import (ControlNetModel, DiffusionPipeline,
                        StableDiffusionPipeline, UniPCMultistepScheduler, StableDiffusionControlNetPipeline)
@@ -29,10 +29,10 @@ GUIDANCE_SCALE = 7.5
 MAX_NUM_WORDS = 77
 device = torch.device(
     'cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-model_id = "/share/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.4.0"
+model_id = "/share/songyuhao/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.4.0"
 cn = True
 if cn:
-    controlnet_path_canny = "/share/generation/models/online/diffusions/base/control_v11p_sd15_canny"
+    controlnet_path_canny = "/share/songyuhao/generation/models/online/diffusions/base/control_v11p_sd15_canny"
     controlnet = ControlNetModel.from_pretrained(
         controlnet_path_canny, torch_dtype=torch.float16).to(device)
     ldm_stable = StableDiffusionControlNetPipeline.from_pretrained(
@@ -45,7 +45,7 @@ ldm_stable.scheduler = UniPCMultistepScheduler.from_config(
     ldm_stable.scheduler.config)
 tokenizer = ldm_stable.tokenizer
 LIMIT = 64
-generator = torch.Generator().manual_seed(917)
+generator = torch.Generator().manual_seed(921)
 
 
 class LocalBlend:
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     # Create an ArgumentParser object
     parser = argparse.ArgumentParser()
     # Define command-line arguments
-    parser.add_argument('--ORI_JSON_PATH', default="/share/generation/data/p2p_cn/ori_jsons/night_test.json", help='Specify a ori json path')
+    parser.add_argument('--ORI_JSON_PATH', default="/share/songyuhao/generation/data/p2p_cn/ori_jsons/night_test.json", help='Specify a ori json path')
     parser.add_argument('--CO', type=float, default=0.8, help='Specify the coefficient')
     parser.add_argument('--START_P', type=int, default=0, help='Specify the start point')
 
@@ -444,12 +444,12 @@ if __name__ == "__main__":
     CO = args.CO
     START_P = args.START_P
 
-    # ORI_JSON_PATH = "/share/generation/data/train/diffusions/comb_cls/index_new.json"
+    # ORI_JSON_PATH = "/share/songyuhao/generation/data/train/diffusions/comb_cls/index_new.json"
 
-    SAVE_ROOT = "/share/generation/data/p2p_cn/imgs"
+    SAVE_ROOT = "/share/songyuhao/generation/data/p2p_cn/imgs"
     from datetime import datetime
     current_time = datetime.now().time()
-    NEW_JSON_PATH = "/share/generation/data/p2p_cn/new_jsons/%s" % ORI_JSON_PATH.split(
+    NEW_JSON_PATH = "/share/songyuhao/generation/data/p2p_cn/new_jsons/%s" % ORI_JSON_PATH.split(
         "/")[-1]
     SCENES = ["night", "snowy", "rainy", "foggy"]
     MODELS = ["replace_blend_reweight", "refine_blend_reweight"]
