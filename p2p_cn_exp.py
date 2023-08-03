@@ -22,7 +22,6 @@ import seq_aligner
 import cv2
 
 
-
 LOW_RESOURCE = False
 NUM_DIFFUSION_STEPS = 50
 GUIDANCE_SCALE = 7.5
@@ -30,6 +29,7 @@ MAX_NUM_WORDS = 77
 device = torch.device(
     'cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 model_id = "/mnt/ve_share/songyuhao/generation/models/online/diffusions/res/finetune/dreambooth/SD-HM-V0.4.0"
+# model_id = "/mnt/ve_share/songyuhao/generation/models/online/diffusions/base/stable-diffusion-v1-5"
 cn = True
 if cn:
     controlnet_path_canny = "/mnt/ve_share/songyuhao/generation/models/online/diffusions/base/control_v11p_sd15_canny"
@@ -41,11 +41,9 @@ if cn:
     contorlnet_scale = 0.1
 else:
     ldm_stable = StableDiffusionPipeline.from_pretrained(model_id).to(device)
-ldm_stable.scheduler = UniPCMultistepScheduler.from_config(
-    ldm_stable.scheduler.config)
+ldm_stable.scheduler = UniPCMultistepScheduler.from_config(ldm_stable.scheduler.config)
 tokenizer = ldm_stable.tokenizer
 LIMIT = 64
-generator = torch.Generator().manual_seed(921)
 
 
 class LocalBlend:
@@ -360,7 +358,8 @@ def run_and_display_cn(prompts, control_image, controller, save_path_1=None, sav
     return images, x_t
 
 
-def replace_blend_reweight(prompts: list, words: tuple, latent_x, save_root: str, scene: str = None, id: int = 0, cross_steps: float = 0.8, self_steps: float = 0.8, amplify_co: float = 2.0):
+def replace_blend_reweight(prompts: list, words: tuple, latent_x, save_root: str, scene: str = None, id: int = 0, cross_steps: float = 0.8, self_steps: float = 0.8, amplify_co: float = 2.0, generator=None, control_image_x=None):
+    print(cross_steps, self_steps, amplify_co)
     word_blend = LocalBlend(prompts, words)
     controller_a = AttentionReplace(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps,
                                     self_replace_steps=self_steps, local_blend=word_blend)
@@ -369,52 +368,39 @@ def replace_blend_reweight(prompts: list, words: tuple, latent_x, save_root: str
     controller = AttentionReweight(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps,
                                    self_replace_steps=self_steps, equalizer=equalizer, local_blend=word_blend, controller=controller_a)
 
-    save_id = "%s/%d" % (save_root, id)
-    if not os.path.exists(save_id):
-        os.makedirs(save_id, exist_ok=True)
-    co_path = "%s/%.2f_%.2f_%.2f" % (save_id,
-                                     cross_steps, self_steps, amplify_co)
-    save_path_1 = "%s/%s.png" % (co_path, "_".join(prompts[0].split()))
-    save_path_2 = "%s/%s.png" % (co_path, "_".join(prompts[1].split()))
-    if not os.path.exists(co_path):
-        os.makedirs(co_path, exist_ok=True)
+    save_path_1 = "%s/ori.png" % save_root
+    save_path_2 = "%s/%.2f_%.2f.png" % (save_root, cross_steps, amplify_co)
+    
     if cn:
-        control_image = Image.fromarray(np.zeros((512, 512)))
-        images, latent =  ptp_utils.text2image_ldm_stable_cn(ldm_stable, control_image, prompts, EmptyControl(), latent=None, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE,contorlnet_scale=0)
-        canny_image = cv2.Canny(np.array(images[0]), 100, 200)
-        canny_image = canny_image[:, :, None]
-        canny_image = np.concatenate(
-            [canny_image, canny_image, canny_image], axis=2)
-        control_image = Image.fromarray(canny_image)
-        _ = run_and_display_cn(prompts, control_image, controller, latent=latent, run_baseline=False, generator=generator,
-                            save_path_1=save_path_1, save_path_2=save_path_2, contorlnet_scale=contorlnet_scale, controller_t=controller)
+        # control_image = Image.fromarray(np.zeros((512, 512)))
+        # images, latent =  ptp_utils.text2image_ldm_stable_cn(ldm_stable, control_image, prompts, EmptyControl(), latent=None, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE, contorlnet_scale=0)
+        # canny_image = cv2.Canny(np.array(images[0]), 100, 200)
+        # canny_image = canny_image[:, :, None]
+        # canny_image = np.concatenate(
+        #     [canny_image, canny_image, canny_image], axis=2)
+        # control_image = Image.fromarray(canny_image)
+
+        _ = run_and_display_cn(prompts, control_image_x, controller, latent=latent_x, run_baseline=False, generator=generator, save_path_1=save_path_1, save_path_2=save_path_2, contorlnet_scale=contorlnet_scale, controller_t=controller)
     else:
         _ = run_and_display(prompts, controller, latent=latent_x,
-                        run_baseline=False, save_path_1=save_path_1, save_path_2=save_path_2)
+                        run_baseline=False, generator=generator)
     return save_path_1, save_path_2
 
 
-def refine_blend_reweight(prompts: list, words: tuple, amplify_word: str, latent_x, save_root: str, scene: str = None, id: int = 0, cross_steps: float = 0.8, self_steps: float = 0.8, amplify_co: float = 2.0):
+def refine_blend_reweight(prompts: list, words: tuple, amplify_word: str, latent_x, save_root: str, scene: str = None, id: int = 0, cross_steps: float = 0.8, self_steps: float = 0.8, amplify_co: float = 2.0, generator=None):
     word_blend = LocalBlend(prompts, words)
     controller_a = AttentionRefine(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps,
                                    self_replace_steps=self_steps, local_blend=word_blend)
-    equalizer = get_equalizer(prompts[1], (amplify_word,), (2,))
+    equalizer = get_equalizer(prompts[1], (amplify_word,), (amplify_co,))
     controller = AttentionReweight(prompts, NUM_DIFFUSION_STEPS, cross_replace_steps=cross_steps,
                                    self_replace_steps=self_steps, equalizer=equalizer, controller=controller_a, local_blend=word_blend)
 
-    save_id = "%s/%d" % (save_root, id)
-    if not os.path.exists(save_id):
-        os.makedirs(save_id, exist_ok=True)
-    co_path = "%s/%.2f_%.2f_%.2f" % (save_id,
-                                     cross_steps, self_steps, amplify_co)
-    save_path_1 = "%s/%s.png" % (co_path, "_".join(prompts[0].split()))
-    save_path_2 = "%s/%s.png" % (co_path, "_".join(prompts[1].split()))
-    if not os.path.exists(co_path):
-        os.makedirs(co_path, exist_ok=True)
+    save_path_1 = "%s/%.2f_%s.png" % (save_root, cross_steps, words[0])
+    save_path_2 = "%s/%.2f_%s.png" % (save_root, cross_steps, words[1])
         
     if cn:
         control_image = Image.fromarray(np.zeros((512, 512)))
-        images, latent = ptp_utils.text2image_ldm_stable_cn(ldm_stable, control_image, prompts, EmptyControl(), latent=None, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE,contorlnet_scale=0)
+        images, latent = ptp_utils.text2image_ldm_stable_cn(ldm_stable, control_image, prompts, EmptyControl(), latent=None, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE, contorlnet_scale=0)
         canny_image = cv2.Canny(np.array(images[0]), 100, 200)
         canny_image = canny_image[:, :, None]
         canny_image = np.concatenate([canny_image, canny_image, canny_image], axis=2)
@@ -422,93 +408,34 @@ def refine_blend_reweight(prompts: list, words: tuple, amplify_word: str, latent
         _ = run_and_display_cn(prompts, control_image, controller, latent=latent, run_baseline=False, generator=generator,
                             save_path_1=save_path_1, save_path_2=save_path_2, contorlnet_scale=contorlnet_scale, controller_t=controller)
     else:
-        _ = run_and_display(prompts, controller, latent=latent_x,
+        _ = run_and_display(prompts, controller, latent=latent_x, generator=generator,
                             run_baseline=False, save_path_1=save_path_1, save_path_2=save_path_2)
     return save_path_1, save_path_2
 
 
 
 if __name__ == "__main__":
-    # Create an ArgumentParser object
-    parser = argparse.ArgumentParser()
-    # Define command-line arguments
-    parser.add_argument('--ORI_JSON_PATH', default="/mnt/ve_share/songyuhao/generation/data/p2p_cn/ori_jsons/night_test.json", help='Specify a ori json path')
-    parser.add_argument('--CO', type=float, default=0.1, help='Specify the coefficient')
-    parser.add_argument('--START_P', type=int, default=0, help='Specify the start point')
-
-    # Parse the command-line arguments
-    args = parser.parse_args()
-
-    # Access the argument values
-    ORI_JSON_PATH = args.ORI_JSON_PATH
-    CO = args.CO
-    START_P = args.START_P
-
-    # ORI_JSON_PATH = "/mnt/ve_share/songyuhao/generation/data/train/diffusions/comb_cls/index_new.json"
-
-    SAVE_ROOT = "/mnt/ve_share/songyuhao/generation/data/p2p_cn/imgs/exp"
-    from datetime import datetime
-    current_time = datetime.now().time()
-    NEW_JSON_PATH = "/mnt/ve_share/songyuhao/generation/data/p2p_cn/new_jsons/%s" % ORI_JSON_PATH.split(
-        "/")[-1]
-    SCENES = ["night", "snowy", "rainy", "foggy"]
-    MODELS = ["replace_blend_reweight", "refine_blend_reweight"]
-
+    SAVE_ROOT = "/mnt/ve_share/songyuhao/generation/data/p2p_cn/imgs/exp2"
     os.makedirs(SAVE_ROOT, exist_ok=True)
 
+    prompts = ["daytime, a bus and a car on a city street with a bridge in the background and a green car on the road", "nighttime, a bus and a car on a city street with a bridge in the background and a green car on the road"]
 
-    result = []
-    with open(ORI_JSON_PATH, 'r') as file:
-        data = json.load(file)[START_P:]
-        # data = [_ for _ in data if _["scene"] in ["night"]]
-        # data = random.sample(data, 10)
+    generator = torch.Generator("cpu").manual_seed(917)
+    control_image = Image.fromarray(np.zeros((512, 512)))
+    images, latent =  ptp_utils.text2image_ldm_stable_cn(ldm_stable, control_image, prompts, EmptyControl(), latent=None, num_inference_steps=NUM_DIFFUSION_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, low_resource=LOW_RESOURCE, contorlnet_scale=0)
+    canny_image = cv2.Canny(np.array(images[0]), 100, 200)
+    canny_image = canny_image[:, :, None]
+    canny_image = np.concatenate(
+        [canny_image, canny_image, canny_image], axis=2)
+    control_image = Image.fromarray(canny_image)
+    
+    for i in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]:
+        # for j in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]:
+            for k in [0.4,0.8,1.2,1.6,2.0,2.4,2.8,3.2,3.6,4.0]:
+    # for i in [0.1,0.9,]:
+    #     for j in [0.1,0.9,]:
+    #         for k in [0.4,4.0,]:
+                generator = torch.Generator("cpu").manual_seed(917)
+                save_path_1, save_path_2 = replace_blend_reweight(prompts, ("daytime,", "nighttime,"), latent_x=latent, save_root=SAVE_ROOT, cross_steps=i, self_steps=0.5, amplify_co=k, generator=generator, control_image_x=control_image)
+                print(save_path_1, save_path_2)
 
-    for model in MODELS:
-        save_1 = "%s/%s" % (SAVE_ROOT, model)
-        if not os.path.exists(save_1):
-            os.makedirs(save_1, exist_ok=True)
-        for scene in SCENES:
-            save_2 = "%s/%s" % (save_1, scene)
-            if not os.path.exists(save_2):
-                os.makedirs(save_2, exist_ok=True)
-
-    for each in tqdm(data):
-        prompts = [each["prompt_1"], each["prompt_2"]]
-        id, scene = each["id"], each["scene"]
-
-        # controller = AttentionStore()
-        # image, x_t = run_and_display([prompts[0]], controller, latent=None, run_baseline=False, generator=g_cpu, split_save=False)
-
-        words_1 = prompts[0].split()
-        words_2 = prompts[1].split()
-
-        if len(words_1) != len(words_2):
-            last_word = ""
-            for word_1, word_2 in zip(words_1, words_2):
-                if word_1 != word_2:
-                    break
-                last_word = word_2
-            save_path_1, save_path_2 = refine_blend_reweight(prompts, words=(last_word, last_word), amplify_word="snow", latent_x=None,
-                                                             save_root="%s/refine_blend_reweight/%s" % (SAVE_ROOT, scene), scene=scene, id=id, cross_steps=CO, self_steps=CO)
-
-        else:
-            different_words = []
-            for word_1, word_2 in zip(words_1, words_2):
-                if word_1 != word_2:
-                    print(word_1, word_2)
-                    different_words.append((word_1, word_2))
-                    print(different_words)
-
-            if len(set(different_words)) == 1:
-                print(prompts)
-                print(different_words[0])
-                save_path_1, save_path_2 = replace_blend_reweight(prompts, different_words[0], latent_x=None, save_root="%s/replace_blend_reweight/%s" % (
-                    SAVE_ROOT, scene), scene=scene, id=id, cross_steps=CO, self_steps=CO)
-
-        each["img_path_1"] = save_path_1
-        each["img_path_2"] = save_path_2
-
-        result.append(each)
-
-    with open(NEW_JSON_PATH, 'w') as json_file:
-        json.dump(result, json_file, indent=4)
